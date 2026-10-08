@@ -7,11 +7,12 @@ import recruitmentRoutes from './routes/recruitment.routes.js';
 import { initMonitoringScheduler } from './services/recruitment/scheduler.service.js';
 
 const app = express();
-const PORT = process.env.PORT ?? 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
+  ...(process.env.CLIENT_ORIGIN ? [process.env.CLIENT_ORIGIN] : []),
 ];
 
 // --- Middleware ---
@@ -57,8 +58,9 @@ app.use((_req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`SarkariJob API running on http://localhost:${PORT}`);
+// --- Start server ---
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`SarkariJob API running on port ${PORT}`);
 
   // Initialize background recruitment monitoring scheduler if enabled via .env
   initMonitoringScheduler();

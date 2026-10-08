@@ -258,7 +258,7 @@ export async function processRecruitmentDocument(
       title: recruitmentUpdate.title,
       notification_number: recruitment.notification_number,
       recruitment_type: recruitment.recruitment_type,
-      description: recruitmentUpdate.description,
+      description: recruitmentUpdate.description ?? null,
       vacancies: recruitmentUpdate.vacancies,
       notification_date: recruitmentUpdate.notification_date,
       application_start: recruitmentUpdate.application_start,
