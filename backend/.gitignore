@@ -1,0 +1,10 @@
+# Dependencies
+node_modules/
+dist/
+
+# Environment secrets - NEVER commit
+.env
+
+# Logs
+*.log
+npm-debug.log*
