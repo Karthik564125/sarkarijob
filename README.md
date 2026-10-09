@@ -466,8 +466,8 @@ Full-Stack Developer | React | TypeScript | Node.js
 I built SarkariJob to explore how full-stack development, database design, automated data collection, and AI-assisted document processing can solve a practical problem for government-job aspirants.
 
 🌐 **Portfolio:** [karthik-portfolio-blond.vercel.app](https://karthik-portfolio-blond.vercel.app/)
-
 🐙 **GitHub:** [Karthik564125](https://github.com/Karthik564125)
+🚀 **Live Demo:** [SarkariJob](https://sarkarijob-psi.vercel.app/)
 
 ---
 
