@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   Globe,
   LogOut,
-  X
+  X,
+  Info
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 
@@ -29,6 +30,7 @@ export function Sidebar({ isOpen, onCloseMobile }: SidebarProps) {
     { label: 'Applications', path: '/applications', icon: FileText },
     { label: 'Profile', path: '/profile', icon: User },
     { label: 'Settings', path: '/settings', icon: Settings },
+    { label: 'About This Project', path: '/about', icon: Info },
   ];
 
   const handleLogout = () => {

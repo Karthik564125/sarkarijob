@@ -13,6 +13,7 @@ import { ProfilePage } from './pages/ProfilePage.js';
 import { SettingsPage } from './pages/SettingsPage.js';
 import { RecruitmentDetailPage } from './pages/RecruitmentDetailPage.js';
 import { GovernmentLinksPage } from './pages/GovernmentLinksPage.js';
+import { AboutPage } from './pages/AboutProject.tsx';
 
 import type { ToastMessage } from './components/common/Toast.js';
 
@@ -160,7 +161,16 @@ function AppRoutes() {
       />
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+  path="/about"
+  element={
+    <ProtectedRoute>
+      <AppLayout toasts={toasts} onDismissToast={dismissToast}>
+        <AboutPage />
+      </AppLayout>
+    </ProtectedRoute>
+  }
+/>
     </Routes>
   );
 }
