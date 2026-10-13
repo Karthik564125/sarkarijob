@@ -17,14 +17,20 @@ export const RecruitmentExtractionSchema = z.object({
   age: z.object({
     minimum: z.number().nullable().describe('Minimum age requirement in years'),
     maximum: z.number().nullable().describe('Maximum age limit in years for general category'),
+    cutoff_date: z.string().nullable().optional().describe('Age cut-off date in YYYY-MM-DD format if explicitly stated in notification'),
     relaxation: z.record(z.string(), z.string()).nullable().describe('Age relaxation details by category (e.g. SC/ST: 5 years)'),
+    relaxation_conditions: z.record(z.string(), z.string()).nullable().optional().describe('Conditions or specific rules attached to category age relaxations'),
   }),
 
   education: z.object({
     minimum_level: z.string().nullable().describe('Minimum education level (e.g. 10th, 12th, Graduate, Post Graduate)'),
     required_degrees: z.array(z.string()).nullable().describe('Required degree qualifications (e.g. B.Tech, B.Sc)'),
     allowed_branches: z.array(z.string()).nullable().describe('Allowed engineering/specialization branches'),
+    intermediate_streams: z.array(z.string()).nullable().optional().describe('Accepted or required 12th/Intermediate streams (e.g. MPC, BiPC)'),
     required_subjects: z.array(z.string()).nullable().describe('Required specific subjects'),
+    passing_year_cutoff: z.number().nullable().optional().describe('Passing year cut-off or graduation year requirement if specified'),
+    qualification_cutoff_date: z.string().nullable().optional().describe('Date by which essential qualification must be completed'),
+    diploma_allowed_as_intermediate: z.boolean().nullable().optional().describe('Whether a 3-year diploma is explicitly recognized as intermediate equivalent for this recruitment'),
   }),
 
   experience: z.object({

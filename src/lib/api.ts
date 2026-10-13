@@ -69,21 +69,31 @@ export const profileApi = {
   updateEducation10th: (data: {
     school_name?: string;
     board?: string;
+    board_other?: string;
     passing_year?: number;
     percentage?: string;
+    percentage_or_cgpa?: string;
   }) => apiClient.put('/profile/education/10th', data),
 
   updateEducation12th: (data: {
     school_college_name?: string;
+    college_name?: string;
     board?: string;
+    board_other?: string;
     stream?: string;
+    stream_other?: string;
     passing_year?: number;
     percentage?: string;
+    percentage_or_cgpa?: string;
+    subjects?: string[];
   }) => apiClient.put('/profile/education/12th', data),
 
   updateEducationGraduation: (data: {
     degree?: string;
+    degree_other?: string;
     branch?: string;
+    branch_other?: string;
+    college_name?: string;
     university?: string;
     passing_year?: number;
     percentage_or_cgpa?: string;

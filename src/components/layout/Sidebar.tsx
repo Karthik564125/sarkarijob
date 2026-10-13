@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -5,7 +6,6 @@ import {
   FileText, 
   User, 
   Settings, 
-  Briefcase,
   ShieldCheck,
   Globe,
   LogOut,
@@ -13,6 +13,8 @@ import {
   Info
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
+import { LogoutConfirmModal } from '../common/LogoutConfirmModal.js';
+import sidebarLogo from '../../assets/logo.png';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onCloseMobile }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -59,9 +62,11 @@ export function Sidebar({ isOpen, onCloseMobile }: SidebarProps) {
         <div>
           <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs">
-                <Briefcase className="w-4 h-4" />
-              </div>
+              <img
+                src={sidebarLogo}
+                alt="SarkariJob"
+                className="w-10 h-10 object-contain flex-shrink-0"
+              />
               <div>
                 <span className="font-bold text-slate-900 text-base tracking-tight block leading-tight">
                   SarkariJob
@@ -140,7 +145,7 @@ export function Sidebar({ isOpen, onCloseMobile }: SidebarProps) {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleLogout();
+                setShowLogoutModal(true);
               }}
               title="Log Out"
               className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
@@ -150,6 +155,14 @@ export function Sidebar({ isOpen, onCloseMobile }: SidebarProps) {
           </div>
         </div>
       </aside>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+      />
     </>
   );
 }
+

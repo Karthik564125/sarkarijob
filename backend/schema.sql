@@ -33,8 +33,10 @@ CREATE TABLE IF NOT EXISTS education_10th (
   user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   school_name TEXT,
   board TEXT,
+  board_other TEXT,
   passing_year INTEGER,
   percentage TEXT,
+  percentage_or_cgpa TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -44,10 +46,15 @@ CREATE TABLE IF NOT EXISTS education_12th (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   school_college_name TEXT,
+  college_name TEXT,
   board TEXT,
+  board_other TEXT,
   stream TEXT,
+  stream_other TEXT,
   passing_year INTEGER,
   percentage TEXT,
+  percentage_or_cgpa TEXT,
+  subjects TEXT[] DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -57,7 +64,10 @@ CREATE TABLE IF NOT EXISTS education_graduation (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   degree TEXT,
+  degree_other TEXT,
   branch TEXT,
+  branch_other TEXT,
+  college_name TEXT,
   university TEXT,
   passing_year INTEGER,
   percentage_or_cgpa TEXT,

@@ -17,21 +17,31 @@ export interface UserProfile {
 export interface Education10th {
   school_name: string | null;
   board: string | null;
+  board_other?: string | null;
   passing_year: number | null;
   percentage: string | null;
+  percentage_or_cgpa?: string | null;
 }
 
 export interface Education12th {
   school_college_name: string | null;
+  college_name?: string | null;
   board: string | null;
+  board_other?: string | null;
   stream: string | null;
+  stream_other?: string | null;
   passing_year: number | null;
   percentage: string | null;
+  percentage_or_cgpa?: string | null;
+  subjects?: string[];
 }
 
 export interface EducationGraduation {
   degree: string | null;
+  degree_other?: string | null;
   branch: string | null;
+  branch_other?: string | null;
+  college_name?: string | null;
   university: string | null;
   passing_year: number | null;
   percentage_or_cgpa: string | null;

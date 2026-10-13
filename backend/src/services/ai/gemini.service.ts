@@ -50,13 +50,19 @@ JSON SCHEMA REQUIREMENT:
   "age": {
     "minimum": number | null,
     "maximum": number | null,
-    "relaxation": { [category: string]: string } | null
+    "cutoff_date": "YYYY-MM-DD" | null,
+    "relaxation": { [category: string]: string } | null,
+    "relaxation_conditions": { [category: string]: string } | null
   },
   "education": {
     "minimum_level": string | null,
     "required_degrees": string[] | null,
     "allowed_branches": string[] | null,
-    "required_subjects": string[] | null
+    "intermediate_streams": string[] | null,
+    "required_subjects": string[] | null,
+    "passing_year_cutoff": number | null,
+    "qualification_cutoff_date": "YYYY-MM-DD" | null,
+    "diploma_allowed_as_intermediate": boolean | null
   },
   "experience": {
     "required": boolean | null,
