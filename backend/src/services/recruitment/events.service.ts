@@ -266,6 +266,17 @@ export function detectRecruitmentChanges(
  * Re-evaluate user matches ONLY for users who already have an existing match for this recruitment.
  */
 export async function reevaluateAffectedUserMatches(recruitmentId: string): Promise<number> {
+  // Skip expensive match re-evaluation if the recruitment has no extracted eligibility rules yet
+  const { data: rec } = await supabase
+    .from('recruitments')
+    .select('eligibility_rules')
+    .eq('id', recruitmentId)
+    .single();
+
+  if (!rec || !rec.eligibility_rules) {
+    return 0;
+  }
+
   const { data: existingMatches, error } = await supabase
     .from('user_recruitment_matches')
     .select('user_id')

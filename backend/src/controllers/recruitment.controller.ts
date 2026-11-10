@@ -676,6 +676,45 @@ export async function getUserEvents(req: Request, res: Response): Promise<void> 
       return isEventRecentAndRelevant(ev);
     });
 
+    // Ensure every current & relevant recruitment appears in notifications feed even if no separate event row was logged
+    let recQuery = supabase
+      .from('recruitments')
+      .select('id, title, organization, notification_number, notification_date, application_start, application_end, status, official_page_url, official_pdf_url, created_at, last_seen_at')
+      .order('created_at', { ascending: false });
+
+    if (targetOrg) {
+      recQuery = recQuery.eq('organization', targetOrg);
+    }
+
+    const { data: allRecs } = await recQuery;
+    const currentRecs = (allRecs || []).filter((r) => isRecruitmentCurrentOrRelevant(r));
+    const existingRecIdsInEvents = new Set(filteredEvents.map((ev: any) => ev.recruitment_id));
+
+    for (const r of currentRecs) {
+      if (!existingRecIdsInEvents.has(r.id)) {
+        filteredEvents.push({
+          id: `rec-notif-${r.id}`,
+          recruitment_id: r.id,
+          event_type: 'notification',
+          title: r.title,
+          description: `Official recruitment notification published by ${r.organization}`,
+          official_url: r.official_pdf_url || r.official_page_url,
+          event_date: r.notification_date || r.application_start,
+          created_at: r.last_seen_at || r.created_at,
+          recruitments: {
+            id: r.id,
+            title: r.title,
+            organization: r.organization,
+            notification_number: r.notification_number,
+            notification_date: r.notification_date,
+            application_start: r.application_start,
+            application_end: r.application_end,
+            status: r.status,
+          },
+        } as any);
+      }
+    }
+
     // Sort by meaningful event date (event_date -> notification_date -> created_at)
     filteredEvents.sort((a: any, b: any) => {
       const timeA = new Date(a.event_date || a.recruitments?.notification_date || a.created_at).getTime();
@@ -849,7 +888,11 @@ export async function triggerRRBCollection(_req: Request, res: Response): Promis
   try {
     const items = await collector.collect();
     console.log(`[RRB] Discovered ${items.length} item(s), saving to Supabase...`);
-    const result = await saveCollectionResults(items, collector.organization);
+    const result = await saveCollectionResults(
+      items,
+      collector.organization,
+      collector.lastDiagnostics ?? {}
+    );
     res.status(200).json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -863,6 +906,11 @@ export async function triggerRRBCollection(_req: Request, res: Response): Promis
       unchanged: 0,
       documents: 0,
       errors: [msg],
+      sourcesAttempted: collector.lastDiagnostics?.sourcesAttempted ?? 0,
+      sourcesAccessed: collector.lastDiagnostics?.sourcesAccessed ?? 0,
+      sourcesFailed: collector.lastDiagnostics?.sourcesFailed ?? 0,
+      censDiscovered: 0,
+      sourceDiagnostics: collector.lastDiagnostics?.sourceDiagnostics ?? [],
     };
     res.status(500).json(errorResult);
   }

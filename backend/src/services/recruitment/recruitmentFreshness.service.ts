@@ -1,3 +1,5 @@
+import { normalizeDate, getKolkataDateString } from './normalization.service.js';
+
 export interface RecruitmentLike {
   id?: string;
   status?: string | null;
@@ -19,7 +21,7 @@ export function getFreshnessEnvConfig() {
 
 /**
  * Determines whether a recruitment item is CURRENT / RELEVANT for active tracking.
- * Note: created_at is database insertion timestamp, NOT official government publication date.
+ * Uses Asia/Kolkata timezone calendar date comparisons.
  */
 export function isRecruitmentCurrentOrRelevant(
   rec: RecruitmentLike,
@@ -27,54 +29,52 @@ export function isRecruitmentCurrentOrRelevant(
 ): boolean {
   const { recentDays, upcomingDays } = getFreshnessEnvConfig();
 
-  const todayStr = now.toISOString().split('T')[0];
-  const todayMs = new Date(todayStr).getTime();
+  const todayStr = getKolkataDateString(now);
+  const normAppStart = normalizeDate(rec.application_start);
+  const normAppEnd = normalizeDate(rec.application_end);
+  const normNotifDate = normalizeDate(rec.notification_date);
 
+  const todayMs = new Date(`${todayStr}T00:00:00+05:30`).getTime();
   const recentCutoffMs = todayMs - recentDays * 24 * 60 * 60 * 1000;
   const upcomingCutoffMs = todayMs + upcomingDays * 24 * 60 * 60 * 1000;
 
-  const appStartMs = rec.application_start ? new Date(rec.application_start).getTime() : null;
-  const appEndMs = rec.application_end ? new Date(rec.application_end).getTime() : null;
-
-  let officialNotifMs: number | null = null;
-  if (rec.notification_date) {
-    const parsed = new Date(rec.notification_date).getTime();
-    if (!isNaN(parsed)) officialNotifMs = parsed;
-  }
+  const appStartMs = normAppStart ? new Date(`${normAppStart}T00:00:00+05:30`).getTime() : null;
+  const appEndMs = normAppEnd ? new Date(`${normAppEnd}T00:00:00+05:30`).getTime() : null;
+  const officialNotifMs = normNotifDate ? new Date(`${normNotifDate}T00:00:00+05:30`).getTime() : null;
 
   // 1. If application_end has passed before today, it is closed/historical.
-  if (appEndMs !== null && !isNaN(appEndMs) && appEndMs < todayMs) {
+  if (normAppEnd && todayStr > normAppEnd) {
     if (officialNotifMs !== null && officialNotifMs >= recentCutoffMs) {
       return true;
     }
     return false;
   }
 
-  // 2. A. Application is currently open (start <= today AND end >= today)
-  if (appStartMs !== null && !isNaN(appStartMs) && appStartMs <= todayMs) {
-    if (appEndMs === null || isNaN(appEndMs) || appEndMs >= todayMs) {
+  // 2. Application is currently open (start <= today AND end >= today)
+  if (normAppStart && normAppStart <= todayStr) {
+    if (!normAppEnd || normAppEnd >= todayStr) {
       return true;
     }
   }
 
-  // 3. B. Application is upcoming (start > today AND start <= upcomingCutoff)
-  if (appStartMs !== null && !isNaN(appStartMs) && appStartMs > todayMs) {
+  // 3. Application is upcoming (start > today AND start <= upcomingCutoff)
+  if (appStartMs !== null && appStartMs > todayMs) {
     if (appStartMs <= upcomingCutoffMs) {
       return true;
     }
   }
 
-  // 4. C. Recently published official notification date
+  // 4. Recently published official notification date
   if (officialNotifMs !== null && officialNotifMs >= recentCutoffMs) {
     return true;
   }
 
-  // 5. Year check in notification_number or title (e.g. "07/2026", "26/2026", "CEN 01/2026", "CEN 03/2018")
+  // 5. Year check in notification_number or title (e.g. "07/2026", "CEN 01/2026", "CEN 03/2018")
   const notifStr = `${rec.notification_number || ''} ${rec.title || ''}`;
   const yearMatch = notifStr.match(/(?:19|20)[0-9]{2}/);
   if (yearMatch) {
     const notifYear = parseInt(yearMatch[0], 10);
-    const currentYear = now.getFullYear();
+    const currentYear = parseInt(todayStr.split('-')[0], 10);
     if (notifYear >= currentYear) {
       return true;
     }
@@ -94,8 +94,14 @@ export function isRecruitmentCurrentOrRelevant(
 }
 
 /**
- * Derives appropriate recruitment status ('open', 'closing_soon', 'upcoming', 'closed')
- * based on application dates and notification date.
+ * Derives appropriate recruitment status ('open', 'upcoming', 'closed')
+ * based on application dates and notification date using Asia/Kolkata timezone.
+ *
+ * Application window:
+ * - Upcoming: opening date is in the future.
+ * - Open: current date is on or after the opening date and on or before the closing date.
+ *         The closing date remains inclusive for the entire stated closing day.
+ * - Closed: closing date has passed.
  */
 export function deriveRecruitmentStatus(
   appStart: string | null,
@@ -103,35 +109,41 @@ export function deriveRecruitmentStatus(
   notifDate: string | null,
   notifNum: string | null,
   now = new Date()
-): string {
-  const todayStr = now.toISOString().split('T')[0];
-  const todayMs = new Date(todayStr).getTime();
-  const { recentDays } = getFreshnessEnvConfig();
-  const recentCutoffMs = todayMs - recentDays * 24 * 60 * 60 * 1000;
+): 'open' | 'upcoming' | 'closed' {
+  const todayStr = getKolkataDateString(now); // Asia/Kolkata YYYY-MM-DD
 
-  if (appStart && appEnd) {
-    const startMs = new Date(appStart).getTime();
-    const endMs = new Date(appEnd).getTime();
-    const sevenDaysFromNowMs = todayMs + 7 * 24 * 60 * 60 * 1000;
+  const normStart = normalizeDate(appStart);
+  const normEnd = normalizeDate(appEnd);
 
-    if (todayMs < startMs) {
+  if (normStart && normEnd) {
+    if (todayStr < normStart) {
       return 'upcoming';
-    } else if (todayMs >= startMs && todayMs <= endMs) {
-      return endMs <= sevenDaysFromNowMs ? 'closing_soon' : 'open';
+    } else if (todayStr >= normStart && todayStr <= normEnd) {
+      return 'open';
     } else {
       return 'closed';
     }
   }
 
-  if (appEnd) {
-    const endMs = new Date(appEnd).getTime();
-    if (endMs < todayMs) return 'closed';
+  if (normEnd) {
+    if (todayStr > normEnd) return 'closed';
+    return 'open';
+  }
+
+  if (normStart) {
+    if (todayStr < normStart) return 'upcoming';
+    return 'open';
   }
 
   if (notifDate) {
-    const notifMs = new Date(notifDate).getTime();
-    if (!isNaN(notifMs) && notifMs < recentCutoffMs) {
-      return 'closed';
+    const normNotif = normalizeDate(notifDate);
+    if (normNotif) {
+      const { recentDays } = getFreshnessEnvConfig();
+      const notifTime = new Date(`${normNotif}T00:00:00+05:30`).getTime();
+      const cutoffTime = now.getTime() - recentDays * 24 * 60 * 60 * 1000;
+      if (notifTime < cutoffTime) {
+        return 'closed';
+      }
     }
   }
 
@@ -139,7 +151,8 @@ export function deriveRecruitmentStatus(
     const yearMatch = notifNum.match(/(?:19|20)[0-9]{2}/);
     if (yearMatch) {
       const year = parseInt(yearMatch[0], 10);
-      if (year < now.getFullYear()) {
+      const currentYear = parseInt(todayStr.split('-')[0], 10);
+      if (year < currentYear) {
         return 'closed';
       }
     }
@@ -167,8 +180,12 @@ export function isEventRecentAndRelevant(
 
   const rec = event.recruitments;
 
-  // 1. Initial discovery / notification events MUST belong to a current/recent recruitment
-  if (event.event_type === 'notification' || event.event_type === 'NEW_RECRUITMENT') {
+  // 1. Initial discovery / notification / applications opened events MUST belong to a current/recent recruitment
+  if (
+    event.event_type === 'notification' ||
+    event.event_type === 'NEW_RECRUITMENT' ||
+    event.event_type === 'application_opened'
+  ) {
     if (!rec) return false;
     if (!isRecruitmentCurrentOrRelevant(rec, now)) {
       return false;
@@ -178,16 +195,13 @@ export function isEventRecentAndRelevant(
     const yearMatch = notifStr.match(/(?:19|20)[0-9]{2}/);
     if (yearMatch) {
       const notifYear = parseInt(yearMatch[0], 10);
-      if (notifYear < now.getFullYear()) {
+      const currentYear = parseInt(getKolkataDateString(now).split('-')[0], 10);
+      if (notifYear < currentYear) {
         return false;
       }
     }
-    if (rec.notification_date) {
-      const notifMs = new Date(rec.notification_date).getTime();
-      if (!isNaN(notifMs) && notifMs < recentCutoffMs) {
-        return false;
-      }
-    }
+    // If the recruitment is current or relevant, display the notification event
+    return true;
   }
 
   // 2. Update events (result, admit_card, corrigendum, etc.) must have occurred within notificationDays

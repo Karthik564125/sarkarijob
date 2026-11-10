@@ -56,6 +56,16 @@ function eventConfig(type: string): EventConfig {
       icon: <FileText className="w-3.5 h-3.5" />,
       colorCls: 'bg-indigo-50 text-indigo-600 border-indigo-200',
     },
+    notification: {
+      label: 'Official Notification',
+      icon: <FileText className="w-3.5 h-3.5" />,
+      colorCls: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+    },
+    application_opened: {
+      label: 'Applications Open',
+      icon: <CalendarDays className="w-3.5 h-3.5" />,
+      colorCls: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    },
     DEADLINE_CHANGED: {
       label: 'Deadline Changed',
       icon: <AlertCircle className="w-3.5 h-3.5" />,

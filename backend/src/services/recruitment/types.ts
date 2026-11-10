@@ -29,8 +29,17 @@ export interface RawRecruitmentItem {
   fee: string | null;
 }
 
+export interface SourceDiagnosticItem {
+  name: string;
+  url: string;
+  status: 'success' | 'failed';
+  httpStatus?: number;
+  error?: string;
+  timestamp: string;
+}
+
 /**
- * Result returned by the collector after processing.
+ * Result returned by the collector after processing with comprehensive diagnostics.
  */
 export interface CollectionResult {
   organization: string;
@@ -41,4 +50,16 @@ export interface CollectionResult {
   unchanged: number;
   documents: number;
   errors: string[];
+  sourcesAttempted?: number;
+  sourcesAccessed?: number;
+  sourcesFailed?: number;
+  censDiscovered?: number;
+  duplicatesSkipped?: number;
+  recordsRequiringVerification?: number;
+  statusCounts?: {
+    open: number;
+    upcoming: number;
+    closed: number;
+  };
+  sourceDiagnostics?: SourceDiagnosticItem[];
 }

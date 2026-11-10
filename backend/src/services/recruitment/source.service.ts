@@ -9,8 +9,6 @@ import {
   RecruitmentState,
 } from './events.service.js';
 
-const SSC_SOURCE_URL = 'https://ssc.gov.in/';
-
 interface ExistingRecruitment extends RecruitmentState {
   id: string;
   organization: string;
@@ -30,7 +28,8 @@ interface ExistingRecruitment extends RecruitmentState {
  */
 export async function saveCollectionResults(
   items: RawRecruitmentItem[],
-  organization: string
+  organization: string,
+  extraDiagnostics?: Partial<CollectionResult>
 ): Promise<CollectionResult> {
   const result: CollectionResult = {
     organization,
@@ -41,6 +40,14 @@ export async function saveCollectionResults(
     unchanged: 0,
     documents: 0,
     errors: [],
+    sourcesAttempted: extraDiagnostics?.sourcesAttempted ?? 1,
+    sourcesAccessed: extraDiagnostics?.sourcesAccessed ?? 1,
+    sourcesFailed: extraDiagnostics?.sourcesFailed ?? 0,
+    censDiscovered: extraDiagnostics?.censDiscovered ?? items.length,
+    duplicatesSkipped: extraDiagnostics?.duplicatesSkipped ?? 0,
+    recordsRequiringVerification: 0,
+    statusCounts: { open: 0, upcoming: 0, closed: 0 },
+    sourceDiagnostics: extraDiagnostics?.sourceDiagnostics ?? [],
   };
 
   // 1. Pre-fetch existing records for this organization
@@ -87,8 +94,8 @@ export async function saveCollectionResults(
     }
   }
 
-  // Update the recruitment_source record's last_checked_at
-  await updateSourceTimestamp(organization, SSC_SOURCE_URL);
+  // Update the recruitment_sources timestamp
+  await updateSourceTimestamp(organization);
 
   return result;
 }
@@ -133,10 +140,18 @@ async function processItem(
     item.notification_number
   );
 
+  if (result.statusCounts && (status === 'open' || status === 'upcoming' || status === 'closed')) {
+    result.statusCounts[status]++;
+  }
+
+  if (safeVacancies === null || (!item.official_pdf_url && !(existing as any)?.official_pdf_url)) {
+    result.recordsRequiringVerification = (result.recordsRequiringVerification ?? 0) + 1;
+  }
+
   // ── 3. Insert or update ────────────────────────────────────────────────────
   let recruitmentId: string;
 
-  if (!existingId) {
+  if (!existing) {
     // New record
     const { data, error } = await supabase
       .from('recruitments')
@@ -201,30 +216,45 @@ async function processItem(
       });
     }
   } else {
-    recruitmentId = existingId;
+    recruitmentId = existing.id;
     const contentChanged = existingHash !== item.content_hash;
+    const hasNewDates =
+      (existing.application_start === null && safeAppStart !== null) ||
+      (existing.application_end === null && safeAppEnd !== null) ||
+      (existing.notification_date === null && safeNotifDate !== null);
+    const hasNewPdf = !(existing as any).official_pdf_url && Boolean(item.official_pdf_url);
+    const hasBetterTitle =
+      existing.title?.includes('Centralised Employment Notice') &&
+      !item.title.endsWith('Centralised Employment Notice');
+
+    const shouldUpdate = contentChanged || hasNewDates || hasNewPdf || hasBetterTitle;
 
     const updatePayload: Record<string, unknown> = {
       last_seen_at: now,
       status,
       recruitment_type: item.recruitment_type,
-      official_page_url: item.official_page_url,
+      official_page_url: item.official_page_url || (existing as any).official_page_url,
     };
     if (item.official_pdf_url && !(existing as any).official_pdf_url) {
       updatePayload.official_pdf_url = item.official_pdf_url;
     }
 
-    if (contentChanged) {
-      // Detect meaningful events between old state and new item
-      const detectedEvents = detectRecruitmentChanges(recruitmentId, existing!, item);
-      for (const eventPayload of detectedEvents) {
-        await createRecruitmentEvent(eventPayload);
+    if (shouldUpdate) {
+      if (contentChanged) {
+        // Detect meaningful events between old state and new item
+        const detectedEvents = detectRecruitmentChanges(recruitmentId, existing, item);
+        for (const eventPayload of detectedEvents) {
+          await createRecruitmentEvent(eventPayload);
+        }
+
+        // Re-evaluate ONLY users who already have an existing match for this recruitment
+        await reevaluateAffectedUserMatches(recruitmentId);
       }
 
-      // Content has changed — update mutable fields safely (preserve existing non-null fields if item fields are null)
+      // Update mutable fields safely (preserve existing non-null fields if item fields are null)
       Object.assign(updatePayload, {
-        title: item.title,
-        notification_number: item.notification_number,
+        title: hasBetterTitle ? item.title : (existing.title || item.title),
+        notification_number: item.notification_number || existing.notification_number,
         description: item.description || (existing as any).description || null,
         vacancies: safeVacancies,
         notification_date: safeNotifDate,
@@ -236,9 +266,6 @@ async function processItem(
         last_changed_at: now,
       });
       result.updated++;
-
-      // Re-evaluate ONLY users who already have an existing match for this recruitment
-      await reevaluateAffectedUserMatches(recruitmentId);
     } else {
       result.unchanged++;
     }
@@ -252,10 +279,23 @@ async function processItem(
       throw new Error(`Update failed: ${error.message}`);
     }
 
+    // Ensure baseline notification event exists for current/relevant recruitments
+    if (isRecruitmentCurrentOrRelevant(item)) {
+      await createRecruitmentEvent({
+        recruitment_id: recruitmentId,
+        event_type: 'notification',
+        title: `New recruitment: ${item.title}`,
+        description: item.description || `New recruitment notification published by ${item.organization}`,
+        official_url: item.official_pdf_url || item.official_page_url,
+        event_date: safeNotifDate || safeAppStart || null,
+        content_hash: sha256(`notification-${recruitmentId}`),
+      });
+    }
+
     const refreshedRecord: ExistingRecruitment = {
       ...existing!,
       organization: item.organization,
-      title: item.title,
+      title: (updatePayload.title as string) || existing!.title,
       notification_number: item.notification_number || existing!.notification_number,
       official_pdf_url: (updatePayload.official_pdf_url as string | null | undefined) ?? existing!.official_pdf_url,
       notification_date: safeNotifDate,
@@ -272,8 +312,11 @@ async function processItem(
 
   // ── 4. Save document record if PDF URL was discovered ─────────────────────
   if (item.official_pdf_url) {
-    await upsertDocument(recruitmentId, item, existingDocKeys);
-    result.documents++;
+    const key = `${recruitmentId}:${item.official_pdf_url}`;
+    if (!existingDocKeys.has(key)) {
+      await upsertDocument(recruitmentId, item, existingDocKeys);
+      result.documents++;
+    }
   }
 }
 
@@ -291,38 +334,6 @@ function completenessScore(recruitment: ExistingRecruitment): number {
     recruitment.exam_date,
     recruitment.vacancies,
   ].filter((value) => value !== null && value !== undefined).length;
-}
-
-async function createNotificationEvent(
-  recruitmentId: string,
-  item: RawRecruitmentItem,
-  _now: string
-): Promise<void> {
-  const eventContentHash = `notification-${recruitmentId}`;
-
-  // Check if this event already exists
-  const { data: existing } = await supabase
-    .from('recruitment_events')
-    .select('id')
-    .eq('recruitment_id', recruitmentId)
-    .eq('event_type', 'notification')
-    .maybeSingle();
-
-  if (existing) return; // Already exists — do not duplicate
-
-  const { error } = await supabase.from('recruitment_events').insert({
-    recruitment_id: recruitmentId,
-    event_type: 'notification',
-    title: `New recruitment discovered: ${item.title}`,
-    description: item.description,
-    official_url: item.official_page_url,
-    event_date: item.notification_date ?? item.application_start ?? null,
-    content_hash: eventContentHash,
-  });
-
-  if (error) {
-    console.warn(`[source.service] Could not create event for ${item.title}: ${error.message}`);
-  }
 }
 
 async function upsertDocument(
@@ -353,16 +364,32 @@ async function upsertDocument(
   }
 }
 
-async function updateSourceTimestamp(
-  organization: string,
-  _sourceUrl: string
-): Promise<void> {
+async function updateSourceTimestamp(organization: string): Promise<void> {
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('recruitment_sources')
-    .update({ last_checked_at: new Date().toISOString() })
+    .update({ last_checked_at: now })
     .eq('organization', organization);
 
   if (error) {
     console.warn(`[source.service] Could not update last_checked_at for ${organization}: ${error.message}`);
+  }
+
+  // For RRB, ensure RRB Apply Portal source is also recorded in recruitment_sources
+  if (organization === 'RRB') {
+    const { error: upsertErr } = await supabase.from('recruitment_sources').upsert(
+      {
+        organization: 'RRB',
+        source_name: 'RRB Apply Portal',
+        source_url: 'https://www.rrbapply.gov.in/',
+        source_type: 'application_portal',
+        active: true,
+        last_checked_at: now,
+      },
+      { onConflict: 'organization,source_url' }
+    );
+    if (upsertErr) {
+      console.warn(`[source.service] Could not upsert RRB Apply Portal source: ${upsertErr.message}`);
+    }
   }
 }
